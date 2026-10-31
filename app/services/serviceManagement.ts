@@ -4,13 +4,14 @@ import {
   onSnapshot, 
   doc, 
   setDoc, 
-  deleteDoc
+  deleteDoc,
+  getDocs
 } from 'firebase/firestore';
 import { PetService } from '../types/booking';
 import { PET_SERVICES as DEFAULT_SERVICES } from '../data/petServices';
 
-const SERVICES_CACHE_KEY = 'pet_care_dynamic_services_v1';
-const PET_TYPES_CACHE_KEY = 'pet_care_dynamic_pet_types_v1';
+const SERVICES_CACHE_KEY = 'pet_care_dynamic_services_v2_empty';
+const PET_TYPES_CACHE_KEY = 'pet_care_dynamic_pet_types_v2_empty';
 
 export interface PetTypeConfig {
   id: string;
@@ -18,13 +19,7 @@ export interface PetTypeConfig {
   icon: string;
 }
 
-export const DEFAULT_PET_TYPES: PetTypeConfig[] = [
-  { id: 'dog', label: 'Dog', icon: '🐶' },
-  { id: 'cat', label: 'Cat', icon: '🐱' },
-  { id: 'rabbit', label: 'Rabbit', icon: '🐰' },
-  { id: 'bird', label: 'Bird', icon: '🦜' },
-  { id: 'other', label: 'Other / Exotic', icon: '🐾' }
-];
+export const DEFAULT_PET_TYPES: PetTypeConfig[] = [];
 
 // --- SERVICES MANAGMENT ---
 
@@ -59,12 +54,6 @@ export function subscribeToServices(onUpdate: (services: PetService[]) => void):
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {
-        if (snapshot.empty) {
-          // Seed initial services if Firestore collection is empty
-          seedInitialServices();
-          return;
-        }
-
         const items: PetService[] = [];
         snapshot.forEach((docSnap) => {
           items.push(docSnap.data() as PetService);
@@ -85,13 +74,27 @@ export function subscribeToServices(onUpdate: (services: PetService[]) => void):
   }
 }
 
-async function seedInitialServices() {
+export async function clearAllServices(): Promise<boolean> {
+  saveServicesCache([]);
   try {
-    for (const service of DEFAULT_SERVICES) {
-      await setDoc(doc(db, 'services', service.id), service);
-    }
-  } catch (e) {
-    console.warn('Seed services error:', e);
+    const colRef = collection(db, 'services');
+    const snapshot = await getDocs(colRef);
+    await Promise.all(snapshot.docs.map(d => deleteDoc(d.ref)));
+    return true;
+  } catch (err) {
+    console.warn('Clear services error:', err);
+    return true;
+  }
+}
+
+export async function clearAllPetTypes(): Promise<boolean> {
+  savePetTypesCache([]);
+  try {
+    const docRef = doc(db, 'settings', 'petTypes');
+    await setDoc(docRef, { list: [] });
+    return true;
+  } catch (err) {
+    return true;
   }
 }
 

@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { BoardingBooking } from '../types/boarding';
 
-const LOCAL_STORAGE_KEY = 'pet_boarding_bookings_cache_v1';
+const LOCAL_STORAGE_KEY = 'pet_boarding_bookings_cache_v2_empty';
 
 function getLocalCache(): BoardingBooking[] {
   if (typeof window === 'undefined') return [];

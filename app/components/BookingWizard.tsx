@@ -36,7 +36,7 @@ export default function BookingWizard({
 }: BookingWizardProps) {
   const [step, setStep] = useState<number>(1);
   
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(initialServiceId || PET_SERVICES[0].id);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(initialServiceId || PET_SERVICES[0]?.id || '');
   const [petType, setPetType] = useState<PetType>('dog');
   
   const [selectedDate, setSelectedDate] = useState<string>(getOffsetDateString(1));
@@ -58,7 +58,16 @@ export default function BookingWizard({
 
   if (!isOpen) return null;
 
-  const currentService = PET_SERVICES.find(s => s.id === selectedServiceId) || PET_SERVICES[0];
+  const currentService = PET_SERVICES.find(s => s.id === selectedServiceId) || PET_SERVICES[0] || {
+    id: 'default',
+    name: 'Pet Care Service',
+    price: 0,
+    durationMinutes: 45,
+    description: '',
+    category: 'grooming' as const,
+    features: [],
+    iconName: 'Scissors'
+  };
 
   const availableDates = Array.from({ length: 10 }).map((_, i) => {
     const dStr = getOffsetDateString(i);
@@ -230,7 +239,9 @@ export default function BookingWizard({
                     >
                       <div>
                         <div className="font-extrabold text-xs text-slate-900">{serv.name}</div>
-                        <div className="text-[11px] text-slate-500 font-medium">~{serv.durationMinutes >= 1440 ? '24h' : `${serv.durationMinutes} mins`}</div>
+                        {Boolean(serv.durationMinutes && serv.durationMinutes > 0) && (
+                          <div className="text-[11px] text-slate-500 font-medium">~{serv.durationMinutes! >= 1440 ? '24h' : `${serv.durationMinutes} mins`}</div>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-3">

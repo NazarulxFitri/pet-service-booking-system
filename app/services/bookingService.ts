@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { PetBooking } from '../types/booking';
 
-const LOCAL_STORAGE_KEY = 'pet_care_bookings_cache_v2';
+const LOCAL_STORAGE_KEY = 'pet_care_bookings_cache_v3_empty';
 
 export function getOffsetDateString(daysOffset: number): string {
   const date = new Date();

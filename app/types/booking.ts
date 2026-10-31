@@ -4,11 +4,12 @@ export type ServiceCategory = 'grooming' | 'vet' | 'surgery' | 'spa_boarding';
 
 export interface PetService {
   id: string;
+  targetPetType?: string;
   name: string;
   category: ServiceCategory;
   description: string;
   price: number;
-  durationMinutes: number;
+  durationMinutes?: number;
   badge?: string;
   popular?: boolean;
   features: string[];

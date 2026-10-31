@@ -85,10 +85,12 @@ export default function ServiceCatalog() {
                     {service.description}
                   </p>
                   
-                  <div className="flex items-center gap-1.5 mt-3.5 sm:mt-4 text-xs text-slate-400 font-medium">
-                    <Clock className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                    <span>Est: {service.durationMinutes >= 1440 ? '24 Hours' : `${service.durationMinutes} Minutes`}</span>
-                  </div>
+                  {Boolean(service.durationMinutes && service.durationMinutes > 0) && (
+                    <div className="flex items-center gap-1.5 mt-3.5 sm:mt-4 text-xs text-slate-400 font-medium">
+                      <Clock className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>Est: {service.durationMinutes! >= 1440 ? '24 Hours' : `${service.durationMinutes} Minutes`}</span>
+                    </div>
+                  )}
                 </div>
 
                 <Link

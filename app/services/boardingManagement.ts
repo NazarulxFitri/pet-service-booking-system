@@ -10,17 +10,12 @@ import {
 import { BoardingRoomOption, BoardingAddon, BoardingPetTypeConfig } from '../types/boarding';
 import { BOARDING_ROOMS as DEFAULT_ROOMS, BOARDING_ADDONS as DEFAULT_ADDONS } from '../data/boardingData';
 
-const BOARDING_ROOMS_CACHE_KEY = 'pet_care_dynamic_boarding_rooms_v3';
-const BOARDING_PETS_CACHE_KEY = 'pet_care_dynamic_boarding_pets_v3';
-const BOARDING_ADDONS_CACHE_KEY = 'pet_care_dynamic_boarding_addons_v3';
-const BOARDING_INITIALIZED_KEY = 'pet_care_boarding_init_v3';
+const BOARDING_ROOMS_CACHE_KEY = 'pet_care_dynamic_boarding_rooms_v4_empty';
+const BOARDING_PETS_CACHE_KEY = 'pet_care_dynamic_boarding_pets_v4_empty';
+const BOARDING_ADDONS_CACHE_KEY = 'pet_care_dynamic_boarding_addons_v4_empty';
+const BOARDING_INITIALIZED_KEY = 'pet_care_boarding_init_v4_empty';
 
-export const DEFAULT_BOARDING_PETS: BoardingPetTypeConfig[] = [
-  { id: 'dog', label: 'Dog / Canine', icon: '🐶', enabled: true },
-  { id: 'cat', label: 'Cat / Feline', icon: '🐱', enabled: true },
-  { id: 'rabbit', label: 'Rabbit / Bunny', icon: '🐰', enabled: true },
-  { id: 'other', label: 'Other Exotic Pet', icon: '🐾', enabled: true }
-];
+export const DEFAULT_BOARDING_PETS: BoardingPetTypeConfig[] = [];
 
 // ==========================================
 // 1. BOARDING ROOMS / PACKAGES MANAGEMENT
@@ -326,6 +321,29 @@ export async function deleteBoardingAddon(addonId: string): Promise<boolean> {
   try {
     const docRef = doc(db, 'boardingAddons', addonId);
     await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    return true;
+  }
+}
+
+export async function clearAllBoardingAddons(): Promise<boolean> {
+  saveBoardingAddonsCache([]);
+  try {
+    const colRef = collection(db, 'boardingAddons');
+    const snapshot = await getDocs(colRef);
+    await Promise.all(snapshot.docs.map(d => deleteDoc(d.ref)));
+    return true;
+  } catch (err) {
+    return true;
+  }
+}
+
+export async function clearAllBoardingPetTypes(): Promise<boolean> {
+  saveBoardingPetTypesCache([]);
+  try {
+    const docRef = doc(db, 'settings', 'boardingPetTypes');
+    await setDoc(docRef, { list: [] });
     return true;
   } catch (err) {
     return true;

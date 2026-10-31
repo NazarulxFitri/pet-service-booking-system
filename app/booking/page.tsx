@@ -288,7 +288,12 @@ function BookingPageContent() {
                         <div>
                           <div className="font-extrabold text-sm text-slate-900">{serv.name}</div>
                           <p className="text-xs text-slate-500 mt-1 leading-relaxed">{serv.description}</p>
-                          <span className="text-xs font-black text-rose-600 mt-2 block">RM {serv.price} • ~{serv.durationMinutes >= 1440 ? '24h' : `${serv.durationMinutes}m`}</span>
+                          <span className="text-xs font-black text-rose-600 mt-2 block">
+                            RM {serv.price}
+                            {serv.durationMinutes && serv.durationMinutes > 0
+                              ? ` • ~${serv.durationMinutes >= 1440 ? '24h' : `${serv.durationMinutes}m`}`
+                              : ''}
+                          </span>
                         </div>
                         <div className={`w-5 h-5 rounded-full border flex items-center justify-center mt-1 shrink-0 ${selectedServiceId === serv.id ? 'border-rose-500 bg-rose-500 text-white' : 'border-slate-300'}`}>
                           {selectedServiceId === serv.id && <Check className="w-3.5 h-3.5 stroke-[3]" />}

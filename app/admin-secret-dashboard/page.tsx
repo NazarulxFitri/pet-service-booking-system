@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Calendar, 
-  Search, 
-  Trash2, 
-  Plus, 
-  Clock, 
-  Edit, 
+import {
+  Calendar,
+  Search,
+  Trash2,
+  Plus,
+  Clock,
+  Edit,
   ArrowLeft,
   Lock,
   User,
@@ -31,29 +31,32 @@ import {
   X,
   Package,
   Sliders,
-  DollarSign
+  DollarSign,
+  ChevronDown
 } from 'lucide-react';
 import { PetBooking, PetService, ServiceCategory } from '../types/booking';
 import { subscribeToBookings, updateBookingStatus, deleteBooking, clearAllBookings } from '../services/bookingService';
-import { 
-  BoardingBooking, 
-  BoardingRoomOption, 
-  BoardingAddon, 
-  BoardingPetTypeConfig 
+import {
+  BoardingBooking,
+  BoardingRoomOption,
+  BoardingAddon,
+  BoardingPetTypeConfig
 } from '../types/boarding';
-import { 
-  subscribeToBoardingBookings, 
-  updateBoardingStatus, 
-  deleteBoardingBooking, 
-  clearAllBoardingBookings 
+import {
+  subscribeToBoardingBookings,
+  updateBoardingStatus,
+  deleteBoardingBooking,
+  clearAllBoardingBookings
 } from '../services/boardingService';
-import { 
-  subscribeToServices, 
-  saveService, 
-  deleteService, 
-  subscribeToPetTypes, 
-  savePetTypes, 
-  PetTypeConfig 
+import {
+  subscribeToServices,
+  saveService,
+  deleteService,
+  clearAllServices,
+  subscribeToPetTypes,
+  savePetTypes,
+  clearAllPetTypes,
+  PetTypeConfig
 } from '../services/serviceManagement';
 import {
   subscribeToBoardingRooms,
@@ -63,9 +66,11 @@ import {
   resetBoardingRoomsToDefault,
   subscribeToBoardingPetTypes,
   saveBoardingPetTypes,
+  clearAllBoardingPetTypes,
   subscribeToBoardingAddons,
   saveBoardingAddon,
-  deleteBoardingAddon
+  deleteBoardingAddon,
+  clearAllBoardingAddons
 } from '../services/boardingManagement';
 
 const AUTH_STORAGE_KEY = 'pet_care_admin_auth_v1';
@@ -76,8 +81,8 @@ export default function AdminSecretDashboardPage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Active sidebar tab: overview, bookings, boarding, boardingPackages, services, petTypes
-  const [activeTab, setActiveTab] = useState<'overview' | 'bookings' | 'boarding' | 'boardingPackages' | 'services' | 'petTypes'>('overview');
+  // Active sidebar tab: overview, bookings, boarding, boardingPackages, services
+  const [activeTab, setActiveTab] = useState<'overview' | 'bookings' | 'boarding' | 'boardingPackages' | 'services'>('overview');
 
   // Real-time state
   const [bookings, setBookings] = useState<PetBooking[]>([]);
@@ -100,6 +105,7 @@ export default function AdminSecretDashboardPage() {
 
   // Service Edit / Add Form Modal
   const [editingService, setEditingService] = useState<PetService | null>(null);
+  const [hasServiceDuration, setHasServiceDuration] = useState<boolean>(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
 
   // Boarding Room Edit / Add Form Modal
@@ -127,6 +133,20 @@ export default function AdminSecretDashboardPage() {
       const stored = sessionStorage.getItem(AUTH_STORAGE_KEY);
       if (stored === 'true') {
         setIsAuthenticated(true);
+      }
+
+      // One-time clean slate reset of all Firestore + localStorage data
+      if (!localStorage.getItem('pet_care_clean_slate_v1')) {
+        localStorage.setItem('pet_care_clean_slate_v1', 'true');
+        Promise.all([
+          clearAllBookings(),
+          clearAllBoardingBookings(),
+          clearAllServices(),
+          clearAllPetTypes(),
+          clearAllBoardingRooms(),
+          clearAllBoardingAddons(),
+          clearAllBoardingPetTypes()
+        ]).catch((err) => console.warn('Clean slate reset warning:', err));
       }
     }
   }, []);
@@ -177,7 +197,7 @@ export default function AdminSecretDashboardPage() {
 
   // Filtered Normal Bookings
   const filteredBookings = bookings.filter((b) => {
-    const matchesSearch = 
+    const matchesSearch =
       b.ownerName.toLowerCase().includes(searchBooking.toLowerCase()) ||
       b.petName.toLowerCase().includes(searchBooking.toLowerCase()) ||
       b.bookingRef.toLowerCase().includes(searchBooking.toLowerCase()) ||
@@ -189,7 +209,7 @@ export default function AdminSecretDashboardPage() {
 
   // Filtered Boarding Bookings
   const filteredBoardingBookings = boardingBookings.filter((b) => {
-    const matchesSearch = 
+    const matchesSearch =
       b.ownerName.toLowerCase().includes(searchBoarding.toLowerCase()) ||
       b.petName.toLowerCase().includes(searchBoarding.toLowerCase()) ||
       b.bookingRef.toLowerCase().includes(searchBoarding.toLowerCase()) ||
@@ -202,7 +222,7 @@ export default function AdminSecretDashboardPage() {
   // Calculate Infographics Data (Service + Boarding)
   const validServiceBookings = bookings.filter(b => b.status !== 'cancelled');
   const validBoardingBookings = boardingBookings.filter(b => b.status !== 'cancelled');
-  
+
   const serviceRevenue = validServiceBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const boardingRevenue = validBoardingBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const grandTotalRevenue = serviceRevenue + boardingRevenue;
@@ -211,7 +231,7 @@ export default function AdminSecretDashboardPage() {
   const confirmedCount = bookings.filter(b => b.status === 'confirmed').length + boardingBookings.filter(b => b.status === 'confirmed').length;
   const completedCount = bookings.filter(b => b.status === 'completed').length + boardingBookings.filter(b => b.status === 'completed').length;
   const cancelledCount = bookings.filter(b => b.status === 'cancelled').length + boardingBookings.filter(b => b.status === 'cancelled').length;
-  
+
   const totalValidCount = validServiceBookings.length + validBoardingBookings.length;
   const avgOrderValue = totalValidCount > 0 ? Math.round(grandTotalRevenue / totalValidCount) : 0;
 
@@ -228,15 +248,23 @@ export default function AdminSecretDashboardPage() {
   const handleSaveServiceForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingService || !editingService.name || editingService.price <= 0) return;
+    if (hasServiceDuration && (!editingService.durationMinutes || editingService.durationMinutes <= 0)) return;
 
-    await saveService(editingService);
+    const serviceToSave: PetService = {
+      ...editingService,
+      durationMinutes: hasServiceDuration ? Number(editingService.durationMinutes) : 0
+    };
+
+    await saveService(serviceToSave);
     setIsServiceModalOpen(false);
     setEditingService(null);
   };
 
   const handleOpenAddService = () => {
+    setHasServiceDuration(false);
     setEditingService({
       id: `service-${Date.now()}`,
+      targetPetType: 'Cat',
       name: '',
       category: 'grooming',
       description: '',
@@ -267,17 +295,21 @@ export default function AdminSecretDashboardPage() {
   // -------------------------
   // Handlers: Boarding Setup
   // -------------------------
+  const PRESET_ROOM_SPECIES = ['Cat', 'Guinea Pig', 'Dog', 'Sugar Glider', 'Hamster', 'Bird'];
+
   const handleOpenAddBoardingRoom = () => {
-    const defaultSpecies = selectedSpeciesFilter === 'all' ? 'dog' : selectedSpeciesFilter;
+    const defaultSpecies = selectedSpeciesFilter === 'all' ? 'Cat' : selectedSpeciesFilter;
+    const matchedPreset = PRESET_ROOM_SPECIES.find(s => s.toLowerCase() === defaultSpecies.toLowerCase()) || 'Cat';
+
     setEditingBoardingRoom({
       id: `room-${Date.now()}`,
-      targetPetType: defaultSpecies,
+      targetPetType: matchedPreset,
       name: '',
-      pricePerNight: defaultSpecies === 'dog' ? 65 : defaultSpecies === 'cat' ? 50 : 35,
+      pricePerNight: matchedPreset.toLowerCase() === 'dog' ? 65 : matchedPreset.toLowerCase() === 'cat' ? 50 : 35,
       description: '',
       badge: 'Comfort Stay',
       popular: false,
-      image: defaultSpecies === 'dog' ? '🐶' : defaultSpecies === 'cat' ? '🐱' : '🏨',
+      image: matchedPreset.toLowerCase() === 'dog' ? '🐶' : matchedPreset.toLowerCase() === 'cat' ? '🐱' : '🏨',
       features: ['Private Climate-Controlled Cabin', 'Daily WhatsApp Updates', '2x Play Sessions']
     });
     setRoomFeaturesInput('Private Climate-Controlled Cabin\nDaily WhatsApp Updates\n2x Play Sessions');
@@ -285,7 +317,10 @@ export default function AdminSecretDashboardPage() {
   };
 
   const handleOpenEditBoardingRoom = (room: BoardingRoomOption) => {
-    setEditingBoardingRoom({ ...room, targetPetType: room.targetPetType || 'dog' });
+    const currentSpecies = room.targetPetType || 'Cat';
+    const matchedPreset = PRESET_ROOM_SPECIES.find(s => s.toLowerCase() === currentSpecies.toLowerCase()) || 'Cat';
+
+    setEditingBoardingRoom({ ...room, targetPetType: matchedPreset });
     setRoomFeaturesInput((room.features || []).join('\n'));
     setIsBoardingRoomModalOpen(true);
   };
@@ -373,9 +408,9 @@ export default function AdminSecretDashboardPage() {
         {/* Subtle Ambient Background Glows */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-rose-500/10 blur-[130px] rounded-full pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-500/5 blur-[100px] rounded-full pointer-events-none" />
-        
+
         <div className="relative w-full max-w-sm bg-[#111726]/90 border border-slate-800/90 rounded-3xl p-8 shadow-2xl backdrop-blur-xl text-center space-y-6 animate-fade-in">
-          
+
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-rose-600 to-rose-500 text-white flex items-center justify-center shadow-lg shadow-rose-950/50 mx-auto border border-rose-400/20">
             <Lock className="w-6 h-6" />
           </div>
@@ -449,11 +484,11 @@ export default function AdminSecretDashboardPage() {
   // ==========================================
   return (
     <main className="min-h-screen bg-[#090D16] text-slate-200 flex flex-col md:flex-row selection:bg-rose-500/30 selection:text-rose-200">
-      
+
       {/* PROFESSIONAL DARK SIDEBAR */}
       <aside className="w-full md:w-64 bg-[#0E1422] border-r border-slate-800/80 p-5 flex flex-col justify-between shrink-0 shadow-xl z-10">
         <div className="space-y-6">
-          
+
           {/* Brand Header */}
           <div className="flex items-center gap-3 px-2 py-1">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-600 to-rose-500 flex items-center justify-center text-white font-bold shadow-md shadow-rose-950/60 border border-rose-400/20">
@@ -469,7 +504,7 @@ export default function AdminSecretDashboardPage() {
 
           {/* Navigation Links Grouped into Data & Operations vs Configuration */}
           <nav className="space-y-6 text-xs font-semibold">
-            
+
             {/* GROUP 1: LIVE DATA & OPERATIONS */}
             <div className="space-y-1.5">
               <div className="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -480,11 +515,10 @@ export default function AdminSecretDashboardPage() {
               {/* Overview & Analytics */}
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'overview'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
+                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${activeTab === 'overview'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <BarChart3 className={`w-4 h-4 ${activeTab === 'overview' ? 'text-rose-400' : 'text-slate-400'}`} />
@@ -495,21 +529,19 @@ export default function AdminSecretDashboardPage() {
               {/* Service Bookings */}
               <button
                 onClick={() => setActiveTab('bookings')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'bookings'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
+                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${activeTab === 'bookings'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Calendar className={`w-4 h-4 ${activeTab === 'bookings' ? 'text-rose-400' : 'text-slate-400'}`} />
                   <span>Service Bookings</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'bookings' 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'bookings'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  : 'bg-slate-800 text-slate-400'
+                  }`}>
                   {bookings.length}
                 </span>
               </button>
@@ -517,21 +549,19 @@ export default function AdminSecretDashboardPage() {
               {/* Hotel Reservations */}
               <button
                 onClick={() => setActiveTab('boarding')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'boarding'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
+                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${activeTab === 'boarding'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Building2 className={`w-4 h-4 ${activeTab === 'boarding' ? 'text-rose-400' : 'text-slate-400'}`} />
                   <span>Hotel Reservations</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'boarding' 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'boarding'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  : 'bg-slate-800 text-slate-400'
+                  }`}>
                   {boardingBookings.length}
                 </span>
               </button>
@@ -547,21 +577,19 @@ export default function AdminSecretDashboardPage() {
               {/* Hotel Suites & Rates */}
               <button
                 onClick={() => setActiveTab('boardingPackages')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'boardingPackages'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
+                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${activeTab === 'boardingPackages'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <BedDouble className={`w-4 h-4 ${activeTab === 'boardingPackages' ? 'text-rose-400' : 'text-slate-400'}`} />
                   <span>Hotel Suites & Rates</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'boardingPackages' 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'boardingPackages'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  : 'bg-slate-800 text-slate-400'
+                  }`}>
                   {boardingRooms.length}
                 </span>
               </button>
@@ -569,44 +597,20 @@ export default function AdminSecretDashboardPage() {
               {/* Clinic Services & Rates */}
               <button
                 onClick={() => setActiveTab('services')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'services'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
+                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${activeTab === 'services'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Scissors className={`w-4 h-4 ${activeTab === 'services' ? 'text-rose-400' : 'text-slate-400'}`} />
                   <span>Clinic Services & Rates</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'services' 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${activeTab === 'services'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  : 'bg-slate-800 text-slate-400'
+                  }`}>
                   {services.length}
-                </span>
-              </button>
-
-              {/* Clinic Pet Species */}
-              <button
-                onClick={() => setActiveTab('petTypes')}
-                className={`w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer ${
-                  activeTab === 'petTypes'
-                    ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold shadow-xs'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <PawPrint className={`w-4 h-4 ${activeTab === 'petTypes' ? 'text-rose-400' : 'text-slate-400'}`} />
-                  <span>Clinic Pet Species</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === 'petTypes' 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                    : 'bg-slate-800 text-slate-400'
-                }`}>
-                  {petTypes.length}
                 </span>
               </button>
             </div>
@@ -637,11 +641,11 @@ export default function AdminSecretDashboardPage() {
 
       {/* SLEEK MAIN CONTENT AREA */}
       <div className="flex-1 p-6 sm:p-8 max-w-6xl overflow-y-auto">
-        
+
         {/* TAB 0: OVERVIEW & INFOGRAPHICS */}
         {activeTab === 'overview' && (
           <div className="space-y-8 animate-fade-in">
-            
+
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -652,15 +656,36 @@ export default function AdminSecretDashboardPage() {
                 </p>
               </div>
 
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111726] border border-slate-800 text-xs text-slate-300 self-start sm:self-auto">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live Sync Enabled
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                <button
+                  onClick={async () => {
+                    if (confirm('Clear ALL data (bookings, hotel reservations, suites, services, add-ons, and pet species) to start completely empty?')) {
+                      await Promise.all([
+                        clearAllBookings(),
+                        clearAllBoardingBookings(),
+                        clearAllServices(),
+                        clearAllPetTypes(),
+                        clearAllBoardingRooms(),
+                        clearAllBoardingAddons(),
+                        clearAllBoardingPetTypes()
+                      ]);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
+                >
+                  Clear All System Data
+                </button>
+
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111726] border border-slate-800 text-xs text-slate-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Live Sync Enabled
+                </div>
               </div>
             </div>
 
             {/* Top 4 Infographic Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
+
               {/* Card 1: Total Revenue */}
               <div className="p-5 rounded-2xl bg-[#111726] border border-slate-800/80 shadow-md space-y-2 hover:border-slate-700/80 transition-all">
                 <div className="flex items-center justify-between text-slate-400">
@@ -713,7 +738,7 @@ export default function AdminSecretDashboardPage() {
 
             {/* Infographics Breakdown Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
+
               {/* Sales Metrics Card */}
               <div className="p-6 rounded-3xl bg-[#111726] border border-slate-800/80 shadow-md space-y-4">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -783,7 +808,7 @@ export default function AdminSecretDashboardPage() {
         {/* TAB 1: STANDARD SERVICE BOOKINGS */}
         {activeTab === 'bookings' && (
           <div className="space-y-6 animate-fade-in">
-            
+
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-black text-white tracking-tight">Hourly Service Bookings</h1>
@@ -820,11 +845,10 @@ export default function AdminSecretDashboardPage() {
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
-                      statusFilter === st
-                        ? 'bg-rose-600 text-white shadow-xs'
-                        : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${statusFilter === st
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
                   >
                     {st} ({st === 'all' ? bookings.length : bookings.filter(b => b.status === st).length})
                   </button>
@@ -876,13 +900,12 @@ export default function AdminSecretDashboardPage() {
 
                           <td className="p-4">
                             <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                                b.status === 'confirmed'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : b.status === 'completed'
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${b.status === 'confirmed'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : b.status === 'completed'
                                   ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
                                   : 'bg-rose-500/10 text-rose-400 border-rose-500/20 line-through'
-                              }`}
+                                }`}
                             >
                               {b.status}
                             </span>
@@ -929,7 +952,7 @@ export default function AdminSecretDashboardPage() {
         {/* TAB 2: PET HOTEL BOARDING RESERVATIONS */}
         {activeTab === 'boarding' && (
           <div className="space-y-6 animate-fade-in">
-            
+
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-black text-white tracking-tight">Pet Hotel Boarding Reservations</h1>
@@ -966,11 +989,10 @@ export default function AdminSecretDashboardPage() {
                   <button
                     key={st}
                     onClick={() => setBoardingStatusFilter(st)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
-                      boardingStatusFilter === st
-                        ? 'bg-rose-600 text-white shadow-xs'
-                        : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${boardingStatusFilter === st
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
                   >
                     {st.replace('_', ' ')} ({st === 'all' ? boardingBookings.length : boardingBookings.filter(b => b.status === st).length})
                   </button>
@@ -1024,15 +1046,14 @@ export default function AdminSecretDashboardPage() {
 
                           <td className="p-4">
                             <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                                b.status === 'confirmed'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : b.status === 'checked_in'
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${b.status === 'confirmed'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : b.status === 'checked_in'
                                   ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                                   : b.status === 'completed'
-                                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
-                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20 line-through'
-                              }`}
+                                    ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20 line-through'
+                                }`}
                             >
                               {b.status.replace('_', ' ')}
                             </span>
@@ -1085,10 +1106,10 @@ export default function AdminSecretDashboardPage() {
           </div>
         )}
 
-        {/* TAB 2.5: HOTEL SUITES, RATES & ACCEPTED PETS CONFIGURATION */}
+        {/* TAB 2.5: HOTEL SUITES & RATES CONFIGURATION */}
         {activeTab === 'boardingPackages' && (
-          <div className="space-y-10 animate-fade-in">
-            
+          <div className="space-y-6 animate-fade-in">
+
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
@@ -1097,34 +1118,11 @@ export default function AdminSecretDashboardPage() {
                   Pet Hotel Suites & Rates Configuration
                 </h1>
                 <p className="text-xs text-slate-400 font-medium mt-1">
-                  Setup room packages, nightly pricing, accepted pet species for hotel stays, and add-on amenities.
+                  Setup room packages, nightly pricing, and target pet species for hotel stays.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-                <button
-                  onClick={async () => {
-                    if (confirm('Reset hotel suites to 4 clean defaults (2 Dog, 2 Cat)?')) {
-                      await resetBoardingRoomsToDefault();
-                    }
-                  }}
-                  className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
-                  title="Reset to 4 clean default suites"
-                >
-                  Reset Clean Defaults
-                </button>
-
-                <button
-                  onClick={async () => {
-                    if (confirm('Clear ALL hotel room suites?')) {
-                      await clearAllBoardingRooms();
-                    }
-                  }}
-                  className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
-                >
-                  Clear All
-                </button>
-
                 <button
                   onClick={handleOpenAddBoardingRoom}
                   className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/50 flex items-center gap-1.5 transition-all cursor-pointer"
@@ -1143,48 +1141,49 @@ export default function AdminSecretDashboardPage() {
                     <Package className="w-4 h-4 text-rose-400" />
                     Species-Tailored Room Suites & Rates
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Dogs, Cats, and Rabbits each have distinct packages, spaces, and nightly rates.
-                  </p>
                 </div>
               </div>
 
-              {/* Species Filter Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setSelectedSpeciesFilter('all')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedSpeciesFilter === 'all'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
-                >
-                  All Suites ({boardingRooms.length})
-                </button>
-                {boardingPetTypes.map((pt) => {
-                  const count = boardingRooms.filter(r => (r.targetPetType || '').toLowerCase() === pt.id.toLowerCase()).length;
-                  const active = selectedSpeciesFilter === pt.id;
-                  return (
+              {/* Species Filter Pills (derived from existing suites) */}
+              {(() => {
+                const uniqueSpecies = Array.from(
+                  new Set(boardingRooms.map(r => (r.targetPetType || 'dog').toLowerCase()))
+                );
+
+                return (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
                     <button
-                      key={pt.id}
-                      onClick={() => setSelectedSpeciesFilter(pt.id)}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        active
-                          ? 'bg-rose-600 text-white shadow-xs'
-                          : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                      }`}
+                      onClick={() => setSelectedSpeciesFilter('all')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${selectedSpeciesFilter === 'all'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                        }`}
                     >
-                      <span>{pt.icon}</span>
-                      <span>{pt.label}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                        active ? 'bg-white/25 text-white' : 'bg-slate-700/60 text-slate-400'
-                      }`}>
-                        {count}
-                      </span>
+                      All Suites ({boardingRooms.length})
                     </button>
-                  );
-                })}
-              </div>
+                    {uniqueSpecies.map((sp) => {
+                      const count = boardingRooms.filter(r => (r.targetPetType || 'dog').toLowerCase() === sp).length;
+                      const active = selectedSpeciesFilter === sp;
+                      return (
+                        <button
+                          key={sp}
+                          onClick={() => setSelectedSpeciesFilter(sp)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer flex items-center gap-1.5 ${active
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                        >
+                          <span>{sp}</span>
+                          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${active ? 'bg-white/25 text-white' : 'bg-slate-700/60 text-slate-400'
+                            }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Suites Grid */}
               {(() => {
@@ -1196,7 +1195,7 @@ export default function AdminSecretDashboardPage() {
                 if (filteredRooms.length === 0) {
                   return (
                     <div className="p-8 rounded-3xl bg-[#111726] border border-slate-800/80 text-center text-slate-400 text-xs">
-                      No suites configured for this species yet. Click &quot;Add Boarding Suite&quot; to create one!
+                      No suites configured yet. Click &quot;Add Suite&quot; to create one!
                     </div>
                   );
                 }
@@ -1204,7 +1203,7 @@ export default function AdminSecretDashboardPage() {
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {filteredRooms.map((room) => (
-                      <div 
+                      <div
                         key={room.id}
                         className="p-5 rounded-3xl bg-[#111726] border border-slate-800/80 shadow-md flex flex-col justify-between hover:border-slate-700/80 transition-all relative"
                       >
@@ -1232,7 +1231,7 @@ export default function AdminSecretDashboardPage() {
 
                           <h3 className="font-extrabold text-base text-white">{room.name}</h3>
                           <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{room.description}</p>
-                          
+
                           {/* Features list preview */}
                           <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5">
                             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Included Amenities:</span>
@@ -1274,275 +1273,92 @@ export default function AdminSecretDashboardPage() {
               })()}
             </div>
 
-            {/* 2. ACCEPTED PET SPECIES FOR HOTEL BOARDING */}
-            <div className="space-y-4 pt-6 border-t border-slate-800/80">
-              <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                  <PawPrint className="w-4 h-4 text-rose-400" />
-                  Accepted Pet Species for Hotel Stays
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Toggle which pets are accepted for overnight hotel check-ins. Disabled species will be hidden on the boarding booking wizard.
-                </p>
-              </div>
-
-              {/* Add Custom Boarding Pet Form */}
-              <div className="bg-[#111726] p-4 rounded-2xl border border-slate-800/80 shadow-md">
-                <form onSubmit={handleAddBoardingPet} className="flex flex-wrap items-center gap-3">
-                  <input
-                    type="text"
-                    placeholder="New Boarding Species (e.g. Guinea Pig)..."
-                    value={newBoardingPetLabel}
-                    onChange={(e) => setNewBoardingPetLabel(e.target.value)}
-                    className="px-4 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none flex-1 min-w-[200px] max-w-xs transition-colors"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Emoji (🐹)"
-                    value={newBoardingPetIcon}
-                    onChange={(e) => setNewBoardingPetIcon(e.target.value)}
-                    className="px-3 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none w-20 text-center transition-colors"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/50 flex items-center gap-1 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" /> Add Allowed Pet
-                  </button>
-                </form>
-              </div>
-
-              {/* Grid of Boarding Pets with Toggle Status */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {boardingPetTypes.map((pt) => {
-                  const isAccepted = pt.enabled !== false;
-                  return (
-                    <div 
-                      key={pt.id} 
-                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
-                        isAccepted 
-                          ? 'bg-[#111726] border-slate-800/80 shadow-md' 
-                          : 'bg-slate-900/40 border-slate-800/40 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-2xl">{pt.icon}</span>
-                        <div>
-                          <span className="font-bold text-xs text-white block leading-tight">{pt.label}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">ID: {pt.id}</span>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                          isAccepted ? 'text-emerald-400' : 'text-slate-500'
-                        }`}>
-                          {isAccepted ? 'Accepted' : 'Not Accepted'}
-                        </span>
-
-                        <button
-                          onClick={() => handleToggleBoardingPet(pt.id)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                            isAccepted
-                              ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                              : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          }`}
-                        >
-                          {isAccepted ? 'Disable' : 'Enable'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3. BOARDING ADD-ONS & AMENITIES */}
-            <div className="space-y-4 pt-6 border-t border-slate-800/80">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-rose-400" />
-                    Boarding Add-ons & Amenities ({boardingAddons.length})
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Optional extras pet parents can add to their reservation (e.g., HD Camera stream, organic snacks, departure bath).
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleOpenAddAddon}
-                  className="px-3.5 py-2 rounded-xl font-bold text-xs text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Add Extra Add-on</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {boardingAddons.map((addon) => (
-                  <div key={addon.id} className="p-4 rounded-2xl bg-[#111726] border border-slate-800/80 shadow-md flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-black text-rose-400">
-                          RM {addon.price}
-                        </span>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
-                          {addon.perNight ? 'Per Night' : 'Flat Fee'}
-                        </span>
-                      </div>
-
-                      <h4 className="font-bold text-xs text-white leading-snug">{addon.name}</h4>
-                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{addon.description}</p>
-                    </div>
-
-                    <div className="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => {
-                          setEditingAddon({ ...addon });
-                          setIsAddonModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700/60 transition-colors cursor-pointer"
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteAddon(addon.id)}
-                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title="Delete addon"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
           </div>
         )}
 
         {/* TAB 3: SERVICES MANAGEMENT (CLINIC) */}
         {activeTab === 'services' && (
           <div className="space-y-6 animate-fade-in">
-            
-            <div className="flex items-center justify-between">
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h1 className="text-2xl font-black text-white tracking-tight">Services & Pricing</h1>
-                <p className="text-xs text-slate-400 font-medium mt-1">Configure service catalogue, categories, and real-time rates.</p>
+                <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                  <Scissors className="w-6 h-6 text-rose-400" />
+                  Clinic Services & Rates Configuration
+                </h1>
+                <p className="text-xs text-slate-400 font-medium mt-1">
+                  Configure service catalogue, categories, and real-time rates.
+                </p>
               </div>
 
               <button
                 onClick={handleOpenAddService}
-                className="px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/50 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/50 flex items-center gap-1.5 transition-all self-start sm:self-auto cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Service</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {services.map((s) => (
-                <div key={s.id} className="p-5 rounded-3xl bg-[#111726] border border-slate-800/80 shadow-md flex flex-col justify-between hover:border-slate-700/80 transition-all">
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                        {s.category}
-                      </span>
-                      <span className="text-lg font-black text-rose-400">RM {s.price}</span>
+            {services.length === 0 ? (
+              <div className="p-8 rounded-3xl bg-[#111726] border border-slate-800/80 text-center text-slate-400 text-xs">
+                No clinic services configured yet. Click &quot;Add Service&quot; to create one!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {services.map((s) => (
+                  <div key={s.id} className="p-5 rounded-3xl bg-[#111726] border border-slate-800/80 shadow-md flex flex-col justify-between hover:border-slate-700/80 transition-all">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                          {s.targetPetType || 'Cat'}
+                        </span>
+                        <span className="text-lg font-black text-rose-400">RM {s.price}</span>
+                      </div>
+
+                      <h3 className="font-extrabold text-base text-white">{s.name}</h3>
+                      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{s.description}</p>
+
+                      {Boolean(s.durationMinutes && s.durationMinutes > 0) && (
+                        <div className="mt-3 text-xs text-slate-500 font-medium flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Duration: {s.durationMinutes} mins</span>
+                        </div>
+                      )}
                     </div>
 
-                    <h3 className="font-extrabold text-base text-white">{s.name}</h3>
-                    <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{s.description}</p>
-                    
-                    <div className="mt-3 text-xs text-slate-500 font-medium flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Duration: {s.durationMinutes} mins</span>
+                    <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          const hasDur = Boolean(s.durationMinutes && s.durationMinutes > 0);
+                          setHasServiceDuration(hasDur);
+                          setEditingService({
+                            ...s,
+                            targetPetType: s.targetPetType || 'Cat',
+                            durationMinutes: hasDur ? s.durationMinutes : 45
+                          });
+                          setIsServiceModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700/60 transition-colors cursor-pointer"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        Edit Price / Info
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Delete service "${s.name}"?`)) await deleteService(s.id);
+                        }}
+                        className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        title="Delete service"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingService(s);
-                        setIsServiceModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 border border-slate-700/60 transition-colors cursor-pointer"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                      Edit Price / Info
-                    </button>
-
-                    <button
-                      onClick={async () => {
-                        if (confirm(`Delete service "${s.name}"?`)) await deleteService(s.id);
-                      }}
-                      className="p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                      title="Delete service"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 4: CLINIC PET SPECIES MANAGEMENT */}
-        {activeTab === 'petTypes' && (
-          <div className="space-y-6 animate-fade-in">
-            
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">Clinic Allowed Pet Species</h1>
-              <p className="text-xs text-slate-400 font-medium mt-1">Species selectable during hourly customer booking.</p>
-            </div>
-
-            <div className="bg-[#111726] p-6 rounded-3xl border border-slate-800/80 shadow-md space-y-4">
-              <form onSubmit={handleAddPetType} className="flex flex-wrap items-center gap-3">
-                <input
-                  type="text"
-                  placeholder="Species Name (e.g. Bird)..."
-                  value={newPetLabel}
-                  onChange={(e) => setNewPetLabel(e.target.value)}
-                  className="px-4 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none flex-1 min-w-[200px] max-w-xs transition-colors"
-                />
-                <input
-                  type="text"
-                  placeholder="Emoji (🦜)"
-                  value={newPetIcon}
-                  onChange={(e) => setNewPetIcon(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none w-20 text-center transition-colors"
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-950/50 flex items-center gap-1 transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" /> Add Species
-                </button>
-              </form>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {petTypes.map((pt) => (
-                <div key={pt.id} className="p-4 rounded-2xl bg-[#111726] border border-slate-800/80 shadow-md flex items-center justify-between hover:border-slate-700/80 transition-all">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">{pt.icon}</span>
-                    <span className="font-bold text-sm text-white">{pt.label}</span>
-                  </div>
-
-                  <button
-                    onClick={() => handleDeletePetType(pt.id)}
-                    className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
-                    title="Delete species"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
           </div>
         )}
@@ -1563,43 +1379,32 @@ export default function AdminSecretDashboardPage() {
             <form onSubmit={handleSaveBoardingRoom} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Target Pet Species</label>
-                <select
-                  value={editingBoardingRoom.targetPetType || 'dog'}
-                  onChange={(e) => setEditingBoardingRoom({ ...editingBoardingRoom, targetPetType: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer capitalize"
-                >
-                  {boardingPetTypes.map((pt) => (
-                    <option key={pt.id} value={pt.id} className="bg-[#0B0F19] text-white">
-                      {pt.icon} {pt.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={editingBoardingRoom.targetPetType || 'Cat'}
+                    onChange={(e) => setEditingBoardingRoom({ ...editingBoardingRoom, targetPetType: e.target.value })}
+                    className="w-full appearance-none pl-3.5 pr-10 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer"
+                  >
+                    {PRESET_ROOM_SPECIES.map((sp) => (
+                      <option key={sp} value={sp} className="bg-[#0B0F19] text-white">
+                        {sp}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-slate-300 font-semibold mb-1">Suite Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Deluxe Glass Suite"
-                    value={editingBoardingRoom.name}
-                    onChange={(e) => setEditingBoardingRoom({ ...editingBoardingRoom, name: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Emoji / Icon</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="🏰"
-                    value={editingBoardingRoom.image}
-                    onChange={(e) => setEditingBoardingRoom({ ...editingBoardingRoom, image: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white text-center text-sm focus:border-rose-500 focus:outline-none transition-colors"
-                  />
-                </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Suite Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Deluxe Glass Suite"
+                  value={editingBoardingRoom.name}
+                  onChange={(e) => setEditingBoardingRoom({ ...editingBoardingRoom, name: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1709,14 +1514,17 @@ export default function AdminSecretDashboardPage() {
 
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Pricing Scheme</label>
-                  <select
-                    value={editingAddon.perNight ? 'perNight' : 'flat'}
-                    onChange={(e) => setEditingAddon({ ...editingAddon, perNight: e.target.value === 'perNight' })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer"
-                  >
-                    <option value="perNight">Per Night</option>
-                    <option value="flat">Flat Fee (One-off)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={editingAddon.perNight ? 'perNight' : 'flat'}
+                      onChange={(e) => setEditingAddon({ ...editingAddon, perNight: e.target.value === 'perNight' })}
+                      className="w-full appearance-none pl-3.5 pr-10 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer"
+                    >
+                      <option value="perNight">Per Night</option>
+                      <option value="flat">Flat Fee (One-off)</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
               </div>
 
@@ -1763,6 +1571,24 @@ export default function AdminSecretDashboardPage() {
 
             <form onSubmit={handleSaveServiceForm} className="space-y-3.5 text-xs">
               <div>
+                <label className="block text-slate-300 font-semibold mb-1">Target Pet Species</label>
+                <div className="relative">
+                  <select
+                    value={editingService.targetPetType || 'Cat'}
+                    onChange={(e) => setEditingService({ ...editingService, targetPetType: e.target.value })}
+                    className="w-full appearance-none pl-3.5 pr-10 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer"
+                  >
+                    {PRESET_ROOM_SPECIES.map((sp) => (
+                      <option key={sp} value={sp} className="bg-[#0B0F19] text-white">
+                        {sp}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-slate-300 font-semibold mb-1">Service Name</label>
                 <input
                   type="text"
@@ -1773,44 +1599,42 @@ export default function AdminSecretDashboardPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Price (RM)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={editingService.price}
-                    onChange={(e) => setEditingService({ ...editingService, price: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Duration (Minutes)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    required
-                    value={editingService.durationMinutes}
-                    onChange={(e) => setEditingService({ ...editingService, durationMinutes: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
-                  />
-                </div>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Price (RM)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={editingService.price}
+                  onChange={(e) => setEditingService({ ...editingService, price: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
+                />
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Category</label>
-                <select
-                  value={editingService.category}
-                  onChange={(e) => setEditingService({ ...editingService, category: e.target.value as ServiceCategory })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white focus:border-rose-500 focus:outline-none transition-colors cursor-pointer"
-                >
-                  <option value="grooming" className="bg-[#0B0F19] text-white">Grooming</option>
-                  <option value="vet" className="bg-[#0B0F19] text-white">Veterinary Medical</option>
-                  <option value="surgery" className="bg-[#0B0F19] text-white">Surgery & Neuter</option>
-                  <option value="spa_boarding" className="bg-[#0B0F19] text-white">Spa & Hotel Boarding</option>
-                </select>
+              <div className="space-y-2.5 p-3 rounded-xl bg-[#0B0F19]/60 border border-slate-800/90">
+                <label className="flex items-center gap-2.5 text-slate-300 font-semibold cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hasServiceDuration}
+                    onChange={(e) => setHasServiceDuration(e.target.checked)}
+                    className="w-4 h-4 rounded accent-rose-500 cursor-pointer"
+                  />
+                  <span>Include Duration (Minutes)</span>
+                </label>
+
+                {hasServiceDuration && (
+                  <div className="pt-1">
+                    <input
+                      type="number"
+                      min="5"
+                      required
+                      placeholder="e.g. 45"
+                      value={editingService.durationMinutes || ''}
+                      onChange={(e) => setEditingService({ ...editingService, durationMinutes: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#0B0F19] border border-slate-700/80 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
